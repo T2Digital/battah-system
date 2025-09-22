@@ -548,18 +548,25 @@ function switchSection(sectionName) {
     sections.forEach(section => {
         section.classList.remove('active');
     });
-
+    
     // إظهار القسم المطلوب
     const targetSection = document.getElementById(`${sectionName}-section`);
     if (targetSection) {
         targetSection.classList.add('active');
         currentSection = sectionName;
         updateSectionContent(sectionName);
+        
+        // إغلاق القائمة الجانبية تلقائياً على الشاشات الصغيرة
+        const sidebar = document.getElementById('sidebar');
+        if (sidebar && window.innerWidth <= 1024) {
+            sidebar.classList.remove('show');
+        }
     } else {
         console.error(`❌ القسم ${sectionName} غير موجود`);
         showNotification('القسم المطلوب غير موجود', 'error');
     }
 }
+
 
 function updateActiveNavButton(activeButton) {
     const navButtons = document.querySelectorAll('.nav-button');
@@ -3645,18 +3652,525 @@ function generateAttendanceReport() {
 
 function generatePayrollReport() {
     console.log('📄 إنشاء تقرير المرتبات...');
-    showNotification('تم إنشاء تقرير المرتبات بنجاح', 'success');
+    
+    try {
+        const reportWindow = window.open('', '_blank', 'width=800,height=600');
+        
+        const payroll = AppData.payroll.map(pay => {
+            const employee = AppData.employees.find(emp => emp.id === pay.employeeId);
+            return {
+                ...pay,
+                employeeName: employee ? employee.name : 'موظف محذوف',
+                remaining: (pay.basicSalary || 0) - (pay.disbursed || 0)
+            };
+        });
+        
+        const totalBasicSalaries = payroll.reduce((sum, pay) => sum + (pay.basicSalary || 0), 0);
+        const totalDisbursed = payroll.reduce((sum, pay) => sum + (pay.disbursed || 0), 0);
+        const totalRemaining = payroll.reduce((sum, pay) => sum + ((pay.basicSalary || 0) - (pay.disbursed || 0)), 0);
+        
+        const reportContent = `
+            <!DOCTYPE html>
+            <html lang="ar" dir="rtl">
+            <head>
+                <meta charset="UTF-8">
+                <title>تقرير المرتبات - شركة بطاح لقطع غيار السيارات</title>
+                <style>
+                    body { font-family: 'Cairo', Arial, sans-serif; direction: rtl; margin: 20px; color: #333; line-height: 1.6; }
+                    .header { text-align: center; margin-bottom: 30px; border-bottom: 3px solid #1e40af; padding-bottom: 20px; }
+                    .header h1 { color: #1e40af; margin-bottom: 10px; font-size: 28px; }
+                    .header h2 { color: #666; margin-bottom: 5px; font-size: 20px; }
+                    .summary { background: #f0f9ff; padding: 20px; border-radius: 10px; margin-bottom: 30px; border-right: 4px solid #1e40af; }
+                    .summary h3 { color: #1e40af; margin-bottom: 15px; }
+                    .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; }
+                    .summary-item { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+                    .summary-item strong { color: #1e40af; font-size: 18px; }
+                    table { width: 100%; border-collapse: collapse; margin: 20px 0; background: white; box-shadow: 0 2px 10px rgba(0,0,0,0.1); border-radius: 10px; overflow: hidden; }
+                    th, td { border: 1px solid #ddd; padding: 12px; text-align: right; }
+                    th { background: linear-gradient(135deg, #1e40af, #3b82f6); color: white; font-weight: 600; font-size: 14px; }
+                    tbody tr:nth-child(even) { background-color: #f0f9ff; }
+                    tbody tr:hover { background-color: #dbeafe; }
+                    .total-row { font-weight: bold; background: linear-gradient(135deg, #dbeafe, #bfdbfe) !important; color: #1e3a8a; }
+                    .paid-row { background-color: #dcfce7 !important; }
+                    .partial-row { background-color: #fef3c7 !important; }
+                    @media print { body { margin: 0; } }
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <h1>شركة بطاح لقطع غيار السيارات</h1>
+                    <h2>تقرير شامل للمرتبات والدفعات</h2>
+                    <p>تاريخ التقرير: ${formatDate(new Date().toISOString().split('T')[0])}</p>
+                    <p>عدد الدفعات: ${payroll.length} دفعة</p>
+                </div>
+                
+                <div class="summary">
+                    <h3>💰 ملخص المرتبات</h3>
+                    <div class="summary-grid">
+                        <div class="summary-item">
+                            <p>إجمالي الرواتب الأساسية</p>
+                            <strong>${formatCurrency(totalBasicSalaries)}</strong>
+                        </div>
+                        <div class="summary-item">
+                            <p>إجمالي المبالغ المصروفة</p>
+                            <strong>${formatCurrency(totalDisbursed)}</strong>
+                        </div>
+                        <div class="summary-item">
+                            <p>إجمالي المبالغ المتبقية</p>
+                            <strong>${formatCurrency(totalRemaining)}</strong>
+                        </div>
+                        <div class="summary-item">
+                            <p>نسبة الصرف</p>
+                            <strong>${totalBasicSalaries > 0 ? ((totalDisbursed / totalBasicSalaries) * 100).toFixed(1) : '0'}%</strong>
+                        </div>
+                    </div>
+                </div>
+                
+                <h3>📋 تفاصيل المرتبات</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>التاريخ</th>
+                            <th>اسم الموظف</th>
+                            <th>الراتب الأساسي</th>
+                            <th>المبلغ المصروف</th>
+                            <th>المبلغ المتبقي</th>
+                            <th>نسبة الصرف</th>
+                            <th>ملاحظات</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${payroll.map(pay => {
+                            const percentage = pay.basicSalary > 0 ? ((pay.disbursed / pay.basicSalary) * 100).toFixed(1) : '0';
+                            const rowClass = pay.remaining <= 0 ? 'paid-row' : 'partial-row';
+                            return `
+                                <tr class="${rowClass}">
+                                    <td>${formatDateShort(pay.date)}</td>
+                                    <td><strong>${pay.employeeName}</strong></td>
+                                    <td><strong>${formatCurrency(pay.basicSalary)}</strong></td>
+                                    <td>${formatCurrency(pay.disbursed)}</td>
+                                    <td><strong>${formatCurrency(pay.remaining)}</strong></td>
+                                    <td><strong>${percentage}%</strong></td>
+                                    <td>${pay.notes || '-'}</td>
+                                </tr>
+                            `;
+                        }).join('')}
+                        <tr class="total-row">
+                            <td colspan="2"><strong>الإجمالي (${payroll.length} دفعة)</strong></td>
+                            <td><strong>${formatCurrency(totalBasicSalaries)}</strong></td>
+                            <td><strong>${formatCurrency(totalDisbursed)}</strong></td>
+                            <td><strong>${formatCurrency(totalRemaining)}</strong></td>
+                            <td><strong>${totalBasicSalaries > 0 ? ((totalDisbursed / totalBasicSalaries) * 100).toFixed(1) : '0'}%</strong></td>
+                            <td></td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <div style="margin-top: 40px; text-align: center; color: #666; font-size: 12px;">
+                    <p>تم إنشاء هذا التقرير بواسطة نظام إدارة شركة بطاح المتكامل</p>
+                </div>
+                
+                <script>
+                    window.onload = function() {
+                        setTimeout(() => window.print(), 1000);
+                    };
+                </script>
+            </body>
+            </html>
+        `;
+        
+        reportWindow.document.write(reportContent);
+        reportWindow.document.close();
+        
+        showNotification('تم إنشاء تقرير المرتبات بنجاح وجاري طباعته', 'success');
+        console.log('✅ تم إنشاء تقرير المرتبات');
+        
+    } catch (error) {
+        console.error('❌ خطأ في إنشاء تقرير المرتبات:', error);
+        showNotification('حدث خطأ أثناء إنشاء التقرير', 'error');
+    }
 }
+
 
 function generateExpensesReport() {
     console.log('📄 إنشاء تقرير المصاريف...');
-    showNotification('تم إنشاء تقرير المصاريف بنجاح', 'success');
+    
+    try {
+        const reportWindow = window.open('', '_blank', 'width=800,height=600');
+        
+        const expenses = [...AppData.expenses];
+        expenses.sort((a, b) => new Date(b.date) - new Date(a.date));
+        
+        const totalAmount = expenses.reduce((sum, exp) => sum + (exp.amount || 0), 0);
+        
+        // إحصائيات حسب النوع
+        const typeStats = {};
+        AppConfig.expenseCategories.forEach(type => {
+            const typeExpenses = expenses.filter(exp => exp.type === type);
+            typeStats[type] = {
+                count: typeExpenses.length,
+                total: typeExpenses.reduce((sum, exp) => sum + (exp.amount || 0), 0)
+            };
+        });
+        
+        // إحصائيات شهرية
+        const monthlyStats = {};
+        expenses.forEach(exp => {
+            const date = new Date(exp.date);
+            const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+            if (!monthlyStats[monthKey]) {
+                monthlyStats[monthKey] = { count: 0, total: 0 };
+            }
+            monthlyStats[monthKey].count++;
+            monthlyStats[monthKey].total += exp.amount || 0;
+        });
+        
+        const reportContent = `
+            <!DOCTYPE html>
+            <html lang="ar" dir="rtl">
+            <head>
+                <meta charset="UTF-8">
+                <title>تقرير المصاريف - شركة بطاح لقطع غيار السيارات</title>
+                <style>
+                    body { font-family: 'Cairo', Arial, sans-serif; direction: rtl; margin: 20px; color: #333; line-height: 1.6; }
+                    .header { text-align: center; margin-bottom: 30px; border-bottom: 3px solid #ef4444; padding-bottom: 20px; }
+                    .header h1 { color: #ef4444; margin-bottom: 10px; font-size: 28px; }
+                    .header h2 { color: #666; margin-bottom: 5px; font-size: 20px; }
+                    .summary { background: #fef2f2; padding: 20px; border-radius: 10px; margin-bottom: 30px; border-right: 4px solid #ef4444; }
+                    .summary h3 { color: #ef4444; margin-bottom: 15px; }
+                    .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; }
+                    .summary-item { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+                    .summary-item strong { color: #ef4444; font-size: 18px; }
+                    table { width: 100%; border-collapse: collapse; margin: 20px 0; background: white; box-shadow: 0 2px 10px rgba(0,0,0,0.1); border-radius: 10px; overflow: hidden; }
+                    th, td { border: 1px solid #ddd; padding: 12px; text-align: right; }
+                    th { background: linear-gradient(135deg, #ef4444, #f87171); color: white; font-weight: 600; font-size: 14px; }
+                    tbody tr:nth-child(even) { background-color: #fef2f2; }
+                    tbody tr:hover { background-color: #fecaca; }
+                    .total-row { font-weight: bold; background: linear-gradient(135deg, #fecaca, #fca5a5) !important; color: #991b1b; }
+                    .badge { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 12px; font-weight: bold; color: white; }
+                    .badge-شخصية { background: #3b82f6; }
+                    .badge-عامة { background: #10b981; }
+                    .badge-موظفين { background: #f59e0b; }
+                    @media print { body { margin: 0; } }
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <h1>شركة بطاح لقطع غيار السيارات</h1>
+                    <h2>تقرير شامل للمصاريف</h2>
+                    <p>تاريخ التقرير: ${formatDate(new Date().toISOString().split('T')[0])}</p>
+                    <p>عدد المصاريف: ${expenses.length} مصروف</p>
+                </div>
+                
+                <div class="summary">
+                    <h3>🧾 ملخص المصاريف</h3>
+                    <div class="summary-grid">
+                        <div class="summary-item">
+                            <p>إجمالي عدد المصاريف</p>
+                            <strong>${expenses.length}</strong>
+                        </div>
+                        <div class="summary-item">
+                            <p>إجمالي المبلغ</p>
+                            <strong>${formatCurrency(totalAmount)}</strong>
+                        </div>
+                        <div class="summary-item">
+                            <p>متوسط المصروف</p>
+                            <strong>${formatCurrency(expenses.length > 0 ? totalAmount / expenses.length : 0)}</strong>
+                        </div>
+                        <div class="summary-item">
+                            <p>عدد أنواع المصاريف</p>
+                            <strong>${Object.keys(typeStats).length}</strong>
+                        </div>
+                    </div>
+                </div>
+                
+                <h3>📋 تفاصيل المصاريف</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>التاريخ</th>
+                            <th>النوع</th>
+                            <th>اسم المصروف</th>
+                            <th>المبلغ</th>
+                            <th>ملاحظات</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${expenses.map(expense => `
+                            <tr>
+                                <td>${formatDateShort(expense.date)}</td>
+                                <td><span class="badge badge-${expense.type}">${expense.type}</span></td>
+                                <td><strong>${expense.name}</strong></td>
+                                <td><strong>${formatCurrency(expense.amount)}</strong></td>
+                                <td>${expense.notes || '-'}</td>
+                            </tr>
+                        `).join('')}
+                        <tr class="total-row">
+                            <td colspan="3"><strong>الإجمالي (${expenses.length} مصروف)</strong></td>
+                            <td><strong>${formatCurrency(totalAmount)}</strong></td>
+                            <td></td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <div style="margin-top: 30px;">
+                    <h3>📊 إحصائيات حسب النوع</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>نوع المصروف</th>
+                                <th>عدد المصاريف</th>
+                                <th>إجمالي المبلغ</th>
+                                <th>متوسط المبلغ</th>
+                                <th>النسبة من الإجمالي</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${Object.entries(typeStats).map(([type, stats]) => `
+                                <tr>
+                                    <td><span class="badge badge-${type}">${type}</span></td>
+                                    <td>${stats.count}</td>
+                                    <td><strong>${formatCurrency(stats.total)}</strong></td>
+                                    <td>${formatCurrency(stats.count > 0 ? stats.total / stats.count : 0)}</td>
+                                    <td><strong>${totalAmount > 0 ? ((stats.total / totalAmount) * 100).toFixed(1) : '0'}%</strong></td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div style="margin-top: 40px; text-align: center; color: #666; font-size: 12px;">
+                    <p>تم إنشاء هذا التقرير بواسطة نظام إدارة شركة بطاح المتكامل</p>
+                </div>
+                
+                <script>
+                    window.onload = function() {
+                        setTimeout(() => window.print(), 1000);
+                    };
+                </script>
+            </body>
+            </html>
+        `;
+        
+        reportWindow.document.write(reportContent);
+        reportWindow.document.close();
+        
+        showNotification('تم إنشاء تقرير المصاريف بنجاح وجاري طباعته', 'success');
+        console.log('✅ تم إنشاء تقرير المصاريف');
+        
+    } catch (error) {
+        console.error('❌ خطأ في إنشاء تقرير المصاريف:', error);
+        showNotification('حدث خطأ أثناء إنشاء التقرير', 'error');
+    }
 }
+
 
 function generateSuppliersReport() {
     console.log('📄 إنشاء تقرير الموردين...');
-    showNotification('تم إنشاء تقرير الموردين بنجاح', 'success');
+    
+    try {
+        const reportWindow = window.open('', '_blank', 'width=800,height=600');
+        
+        const suppliers = [...AppData.suppliers];
+        const payments = [...AppData.payments];
+        
+        // إحصائيات الموردين مع المدفوعات
+        const supplierStats = suppliers.map(supplier => {
+            const supplierPayments = payments.filter(pay => pay.supplierId === supplier.id);
+            const totalPayments = supplierPayments.reduce((sum, pay) => sum + (pay.payment || 0), 0);
+            const totalInvoices = supplierPayments.reduce((sum, pay) => sum + (pay.invoiceTotal || 0), 0);
+            const remaining = totalInvoices - totalPayments;
+            
+            return {
+                ...supplier,
+                paymentsCount: supplierPayments.length,
+                totalPayments,
+                totalInvoices,
+                remaining,
+                lastPaymentDate: supplierPayments.length > 0 ? 
+                    supplierPayments.sort((a, b) => new Date(b.date) - new Date(a.date))[0].date : null
+            };
+        });
+        
+        const grandTotalPayments = supplierStats.reduce((sum, sup) => sum + sup.totalPayments, 0);
+        const grandTotalInvoices = supplierStats.reduce((sum, sup) => sum + sup.totalInvoices, 0);
+        const grandTotalRemaining = supplierStats.reduce((sum, sup) => sum + sup.remaining, 0);
+        
+        const reportContent = `
+            <!DOCTYPE html>
+            <html lang="ar" dir="rtl">
+            <head>
+                <meta charset="UTF-8">
+                <title>تقرير الموردين والمدفوعات - شركة بطاح لقطع غيار السيارات</title>
+                <style>
+                    body { font-family: 'Cairo', Arial, sans-serif; direction: rtl; margin: 20px; color: #333; line-height: 1.6; }
+                    .header { text-align: center; margin-bottom: 30px; border-bottom: 3px solid #10b981; padding-bottom: 20px; }
+                    .header h1 { color: #10b981; margin-bottom: 10px; font-size: 28px; }
+                    .header h2 { color: #666; margin-bottom: 5px; font-size: 20px; }
+                    .summary { background: #f0fdf4; padding: 20px; border-radius: 10px; margin-bottom: 30px; border-right: 4px solid #10b981; }
+                    .summary h3 { color: #10b981; margin-bottom: 15px; }
+                    .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; }
+                    .summary-item { background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+                    .summary-item strong { color: #10b981; font-size: 18px; }
+                    table { width: 100%; border-collapse: collapse; margin: 20px 0; background: white; box-shadow: 0 2px 10px rgba(0,0,0,0.1); border-radius: 10px; overflow: hidden; }
+                    th, td { border: 1px solid #ddd; padding: 12px; text-align: right; }
+                    th { background: linear-gradient(135deg, #10b981, #34d399); color: white; font-weight: 600; font-size: 14px; }
+                    tbody tr:nth-child(even) { background-color: #f0fdf4; }
+                    tbody tr:hover { background-color: #dcfce7; }
+                    .total-row { font-weight: bold; background: linear-gradient(135deg, #dcfce7, #bbf7d0) !important; color: #047857; }
+                    .paid-supplier { background-color: #dcfce7 !important; }
+                    .pending-supplier { background-color: #fef3c7 !important; }
+                    .phone-badge { background: #10b981; color: white; padding: 2px 6px; border-radius: 4px; font-size: 12px; }
+                    @media print { body { margin: 0; } }
+                </style>
+            </head>
+            <body>
+                <div class="header">
+                    <h1>شركة بطاح لقطع غيار السيارات</h1>
+                    <h2>تقرير شامل للموردين والمدفوعات</h2>
+                    <p>تاريخ التقرير: ${formatDate(new Date().toISOString().split('T')[0])}</p>
+                    <p>عدد الموردين: ${suppliers.length} مورد</p>
+                </div>
+                
+                <div class="summary">
+                    <h3>🚚 ملخص الموردين والمدفوعات</h3>
+                    <div class="summary-grid">
+                        <div class="summary-item">
+                            <p>إجمالي عدد الموردين</p>
+                            <strong>${suppliers.length}</strong>
+                        </div>
+                        <div class="summary-item">
+                            <p>إجمالي المدفوعات</p>
+                            <strong>${formatCurrency(grandTotalPayments)}</strong>
+                        </div>
+                        <div class="summary-item">
+                            <p>إجمالي الفواتير</p>
+                            <strong>${formatCurrency(grandTotalInvoices)}</strong>
+                        </div>
+                        <div class="summary-item">
+                            <p>إجمالي المتبقي</p>
+                            <strong>${formatCurrency(grandTotalRemaining)}</strong>
+                        </div>
+                    </div>
+                </div>
+                
+                <h3>🏢 بيانات الموردين</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>اسم المورد</th>
+                            <th>رقم الاتصال</th>
+                            <th>العنوان</th>
+                            <th>عدد المدفوعات</th>
+                            <th>آخر دفعة</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${supplierStats.map(supplier => `
+                            <tr>
+                                <td><strong>${supplier.name}</strong></td>
+                                <td><span class="phone-badge">${supplier.contact}</span></td>
+                                <td>${supplier.address || '-'}</td>
+                                <td><strong>${supplier.paymentsCount}</strong></td>
+                                <td>${supplier.lastPaymentDate ? formatDateShort(supplier.lastPaymentDate) : 'لا توجد مدفوعات'}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+                
+                <h3>💰 ملخص المدفوعات حسب المورد</h3>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>اسم المورد</th>
+                            <th>عدد المدفوعات</th>
+                            <th>إجمالي المدفوع</th>
+                            <th>إجمالي الفواتير</th>
+                            <th>المبلغ المتبقي</th>
+                            <th>نسبة السداد</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${supplierStats.map(supplier => {
+                            const paymentPercentage = supplier.totalInvoices > 0 ? ((supplier.totalPayments / supplier.totalInvoices) * 100).toFixed(1) : '0';
+                            const rowClass = supplier.remaining <= 0 ? 'paid-supplier' : 'pending-supplier';
+                            return `
+                                <tr class="${rowClass}">
+                                    <td><strong>${supplier.name}</strong></td>
+                                    <td>${supplier.paymentsCount}</td>
+                                    <td><strong>${formatCurrency(supplier.totalPayments)}</strong></td>
+                                    <td><strong>${formatCurrency(supplier.totalInvoices)}</strong></td>
+                                    <td><strong>${formatCurrency(supplier.remaining)}</strong></td>
+                                    <td><strong>${paymentPercentage}%</strong></td>
+                                </tr>
+                            `;
+                        }).join('')}
+                        <tr class="total-row">
+                            <td colspan="2"><strong>الإجمالي (${suppliers.length} مورد)</strong></td>
+                            <td><strong>${formatCurrency(grandTotalPayments)}</strong></td>
+                            <td><strong>${formatCurrency(grandTotalInvoices)}</strong></td>
+                            <td><strong>${formatCurrency(grandTotalRemaining)}</strong></td>
+                            <td><strong>${grandTotalInvoices > 0 ? ((grandTotalPayments / grandTotalInvoices) * 100).toFixed(1) : '0'}%</strong></td>
+                        </tr>
+                    </tbody>
+                </table>
+                
+                <div style="margin-top: 30px;">
+                    <h3>📝 تفاصيل جميع المدفوعات</h3>
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>التاريخ</th>
+                                <th>المورد</th>
+                                <th>مبلغ الدفعة</th>
+                                <th>إجمالي الفاتورة</th>
+                                <th>المرتجعات</th>
+                                <th>ملاحظات</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            ${payments.sort((a, b) => new Date(b.date) - new Date(a.date)).map(payment => {
+                                const supplier = suppliers.find(sup => sup.id === payment.supplierId);
+                                return `
+                                    <tr>
+                                        <td>${formatDateShort(payment.date)}</td>
+                                        <td><strong>${supplier ? supplier.name : 'مورد محذوف'}</strong></td>
+                                        <td><strong>${formatCurrency(payment.payment)}</strong></td>
+                                        <td>${formatCurrency(payment.invoiceTotal)}</td>
+                                        <td>${payment.returnedItems || '-'}</td>
+                                        <td>${payment.notes || '-'}</td>
+                                    </tr>
+                                `;
+                            }).join('')}
+                        </tbody>
+                    </table>
+                </div>
+                
+                <div style="margin-top: 40px; text-align: center; color: #666; font-size: 12px;">
+                    <p>تم إنشاء هذا التقرير بواسطة نظام إدارة شركة بطاح المتكامل</p>
+                </div>
+                
+                <script>
+                    window.onload = function() {
+                        setTimeout(() => window.print(), 1000);
+                    };
+                </script>
+            </body>
+            </html>
+        `;
+        
+        reportWindow.document.write(reportContent);
+        reportWindow.document.close();
+        
+        showNotification('تم إنشاء تقرير الموردين والمدفوعات بنجاح وجاري طباعته', 'success');
+        console.log('✅ تم إنشاء تقرير الموردين');
+        
+    } catch (error) {
+        console.error('❌ خطأ في إنشاء تقرير الموردين:', error);
+        showNotification('حدث خطأ أثناء إنشاء التقرير', 'error');
+    }
 }
+
 
 // =================================================================
 // وظائف إضافية ومساعدة
